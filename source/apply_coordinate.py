@@ -38,7 +38,18 @@ print ('size = [%f, %f]\n' % (width, height))
 
 #회전 윈도우 생성
 #cv.namedWindow('CAM_RotateWindow')
-
+'''
+                if i == 9 or i == 164: # 얼굴의 중심(상, 하)
+                    cv.circle(frame, pt, 1, (255, 0, 0), -1, cv.LINE_AA)
+                elif i == 468 or i == 473 : # 눈동자(좌,우) 중심
+                    cv.circle(frame, pt, 1, (255, 0, 0), -1, cv.LINE_AA)
+                elif i == 130 or i == 243: # 왼 눈 양끝
+                    cv.circle(frame, pt, 1, (255, 0, 0), -1, cv.LINE_AA)
+                elif i == 359 or i == 463: # 오른 눈 양끝
+                    cv.circle(frame, pt, 1, (255, 0, 0), -1, cv.LINE_AA)
+                elif i == 6:  # 양눈 중심
+                    cv.circle(frame, pt, 1, (255, 0, 0), -1, cv.LINE_AA)
+'''
 
 mp_face_mesh = mp.solutions.face_mesh
 
@@ -46,8 +57,8 @@ LEFT_EYE = [362,382,381,380,374,373,390,249,263,466,388,387,386,385,384,398]
 RIGHT_EYE = [ 33,7,163,144,145,153,154,155,133,173,157,158,159,160,161,246 ]
 LEFT_IRIS = [474,475,476,477 ]
 RIGHT_IRIS = [469,470,471,472 ]
-# left eye center 473, right eye center 468
-FACE_HEAD_POSE_LACNMARKS = [1, 33, 61, 199, 291, 263, 6, 473, 468]
+# left eye center 468, right eye center 473
+FACE_HEAD_POSE_LACNMARKS = [1, 33, 61, 199, 291, 263, 6, 473, 468, 9, 164, 468, 473, 130, 243, 359, 463]
 
 '''
 화면 비율 = 16 : 9 = 1920 : 1080
@@ -65,10 +76,20 @@ b = ( I7(y)-I1(y)+I8(y)-I2(y)+I9(y)-I3(y) ) / 6
 (Now_I(x) - I5) * A/a
 (Now_I(y) - I5) * B/b
 '''
+setting = 0
 Ix = [''] * 9
 Iy = [''] * 9
 IRx = [''] * 9
 IRy = [''] * 9
+
+def set_left_eye():
+    global left_center, LL,LR, high_middle, low_middle
+    return (left_center[0]-LL) / (LR-LL), (left_center[1]-high_middle) / (low_middle-high_middle)
+
+def set_right_eye():
+    global right_center, RL, RR, high_middle, low_middle
+    return (right_center[0] - RL) / (RR - RL), (right_center[1] - high_middle) / (low_middle - high_middle)
+
 
 
 
@@ -96,9 +117,16 @@ with mp_face_mesh.FaceMesh(max_num_faces =1,
             #face_mesh 전부 표시하기 색(B,G,R)
             i = 0
             for pt in mesh_points:
-                if i == 6:
+
+                if i == 9 or i == 164: # 얼굴의 중심(상, 하)
                     cv.circle(frame, pt, 1, (255, 0, 0), -1, cv.LINE_AA)
-                elif i == 468 :
+                elif i == 468 or i == 473 : # 눈동자(좌,우) 중심
+                    cv.circle(frame, pt, 1, (255, 0, 0), -1, cv.LINE_AA)
+                elif i == 130 or i == 243: # 왼 눈 양끝
+                    cv.circle(frame, pt, 1, (255, 0, 0), -1, cv.LINE_AA)
+                elif i == 359 or i == 463: # 오른 눈 양끝
+                    cv.circle(frame, pt, 1, (255, 0, 0), -1, cv.LINE_AA)
+                elif i == 6:  # 양눈 중심
                     cv.circle(frame, pt, 1, (255, 0, 0), -1, cv.LINE_AA)
                 else:
                     #cv.circle(img, center,radius,color,thicknex,lineType)
@@ -123,22 +151,34 @@ with mp_face_mesh.FaceMesh(max_num_faces =1,
 
             for idx, lm in enumerate(results.multi_face_landmarks[0].landmark):
                 if idx in FACE_HEAD_POSE_LACNMARKS:
+                    #LL, LR, RR, RL, high_middle, low_middle
                     if idx == 1:
                         nose_2d = (lm.x * img_w, lm.y * img_h)
                         nose_3d = (lm.x * img_w, lm.y * img_h, lm.z * 3000)
                     if idx == 6:
-                        I_middle = (lm.x, lm.y)
-                    if idx == 473:
+                        middle= (lm.x * img_w, lm.y * img_h)
+                    if idx == 9:
+                        high_middle = lm.y
+                    if idx == 164:
+                        low_middle = lm.y
+                    if idx == 468:
                         left_center = (lm.x, lm.y)
-                        pass
+                    if idx == 130:
+                        LL = lm.x
+                    if idx == 243:
+                        LR = lm.x
+                    if idx == 473:
+                        right_center = (lm.x, lm.y)
+                    if idx == 463:
+                        RL = lm.x
+                    if idx == 359:
+                        RR = lm.x
 
                     x, y = int(lm.x * img_w), int(lm.y * img_h)
 
                     face_2d.append([x, y])
                     face_3d.append([x, y, lm.z])
 
-            print(I_middle)
-            print(left_center)
 
             face_2d = np.array(face_2d, dtype=np.float64)
             face_3d = np.array(face_3d, dtype=np.float64)
@@ -161,13 +201,13 @@ with mp_face_mesh.FaceMesh(max_num_faces =1,
 
             # nose+3d_projection, jacobian = cv.projectionPoints(nose_3d, rot_vec, trans_vec, camera_mat, dist_mat)
             #print(Ix, Iy)
-            p1 = (int(I_middle[0]), int(I_middle[1]))
+            p1 = (int(middle[0]), int(middle[1]))
             #print(f'눈 사이 : {p1}')
             #print(f'왼눈, 오른눈 : {center_left}, {center_right} ')
             if Iy[8]:
                 X = (Ix[2] - Ix[0] + Ix[5] - Ix[3] + Ix[8] - Ix[6]) / 6
                 Y = (Iy[6] - Iy[0] + Iy[7] - Iy[1] + Iy[8] - Iy[2]) / 6
-                print(X, Y)
+                #print(X, Y)
 
                 RX = (IRx[2] - IRx[0] + IRx[5] - IRx[3] + IRx[8] - IRx[6]) / 6
                 RY = (IRy[6] - IRy[0] + IRy[7] - IRy[1] + IRy[8] - IRy[2]) / 6
@@ -175,15 +215,14 @@ with mp_face_mesh.FaceMesh(max_num_faces =1,
                 half_w = img_w / 2
                 half_h = img_h / 2
 
-                L_eye = (half_w - (Ix[4]-(center_left[0] - I_middle[0])) * half_w / X, half_h + (Iy[4] + (center_left[1] - I_middle[1])) * half_h / Y)
+                L_eye = (half_w + (((left_center[0]-LL) / (LR-LL)) -Ix[4]) * half_w / X, half_h + (((left_center[1] - high_middle) / (low_middle - high_middle)) -Iy[4]) * half_h / Y)
 
-                R_eye = (half_w + (center_right[0] - IRx[5]) * half_w / RX, half_h + (center_left[0] - IRy[5]) * half_h / RY)
+                R_eye = (half_w + (((right_center[0]-RL) / (RR-RL)) -IRx[4]) * half_w / RX, half_h + (((right_center[1] - high_middle) / (low_middle - high_middle)) -IRy[4]) * half_h / RY)
 
-                print(center_left[0] - I_middle[0])
-                print(L_eye)
+                #print(L_eye)
 
-                p2 = (int(L_eye[0]), int(L_eye[1]))
-                #p2 = ((L_eye[0]+R_eye[0]) / 2, (L_eye[1]+R_eye[1]) / 2)
+                #p2 = (int(L_eye[0]), int(L_eye[1]))
+                p2 = (int( (L_eye[0]+R_eye[0]) / 2 ), int( (L_eye[1]+R_eye[1]) / 2 ))
 
                 cv.line(frame, p1, p2, (255, 255, 0), 3)
 
@@ -208,46 +247,49 @@ with mp_face_mesh.FaceMesh(max_num_faces =1,
         resolutuon = 1080
         #dst2 = cv.resize(img, dsize=(resolution/9*16, resolution), interpolation=cv.INTER_AREA)
         #cv.imshow('CAM_RotateWindow2', dst2)
-
         key = cv.waitKey(1)
         if key == ord('q'):
             break
-        elif key == ord('u'):
-            Ix[0], Iy[0] = center_left[0] - I_middle[0], center_left[1] - I_middle[1]
-            IRx[0], IRy[0] = center_right[0], center_right[1]
-            print(Ix[0], Iy[0])
-        elif key == ord('i'):
-            Ix[1], Iy[1] = center_left[0] - I_middle[0], center_left[1] - I_middle[1]
-            IRx[1], IRy[1] = center_right[0], center_right[1]
-            print(Ix[1], Iy[1])
-        elif key == ord('o'):
-            Ix[2], Iy[2] = center_left[0] - I_middle[0], center_left[1] - I_middle[1]
-            IRx[2], IRy[2] = center_right[0], center_right[1]
-            print(Ix[2], Iy[2])
-        elif key == ord('j'):
-            Ix[3], Iy[3] = center_left[0] - I_middle[0], center_left[1] - I_middle[1]
-            IRx[3], IRy[3] = center_right[0], center_right[1]
-            print(Ix[3], Iy[3])
-        elif key == ord('k'):
-            Ix[4], Iy[4] = center_left[0] - I_middle[0], center_left[1] - I_middle[1]
-            IRx[4], IRy[4] = center_right[0], center_right[1]
-            print(Ix[4], Iy[4])
-        elif key == ord('l'):
-            Ix[5], Iy[5] = center_left[0] - I_middle[0], center_left[1] - I_middle[1]
-            IRx[5], IRy[5] = center_right[0], center_right[1]
-            print(Ix[5], Iy[5])
-        elif key == ord('n'):
-            Ix[6], Iy[6] = center_left[0] - I_middle[0], center_left[1] - I_middle[1]
-            IRx[6], IRy[6] = center_right[0], center_right[1]
-            print(Ix[6], Iy[6])
-        elif key == ord('m'):
-            Ix[7], Iy[7] = center_left[0] - I_middle[0], center_left[1] - I_middle[1]
-            IRx[7], IRy[7] = center_right[0], center_right[1]
-            print(Ix[7], Iy[7])
-        elif key == ord(','):
-            Ix[8], Iy[8] = center_left[0] - I_middle[0], center_left[1] - I_middle[1]
-            IRx[8], IRy[8] = center_right[0], center_right[1]
-            print(Ix[8], Iy[8])
+        elif key == ord('\\'):
+            setting = setting % 9
+            print(setting)
+
+            Ix[setting], Iy[setting] = set_left_eye()
+            IRx[setting], IRy[setting] = set_right_eye()
+            #print(Ix[0], Iy[0])
+            setting += 1
+        # elif key == ord('i'):
+        #     Ix[1], Iy[1] = center_left[0] - I_middle[0], center_left[1] - I_middle[1]
+        #     IRx[1], IRy[1] = center_right[0], center_right[1]
+        #     print(Ix[1], Iy[1])
+        # elif key == ord('o'):
+        #     Ix[2], Iy[2] = center_left[0] - I_middle[0], center_left[1] - I_middle[1]
+        #     IRx[2], IRy[2] = center_right[0], center_right[1]
+        #     print(Ix[2], Iy[2])
+        # elif key == ord('j'):
+        #     Ix[3], Iy[3] = center_left[0] - I_middle[0], center_left[1] - I_middle[1]
+        #     IRx[3], IRy[3] = center_right[0], center_right[1]
+        #     print(Ix[3], Iy[3])
+        # elif key == ord('k'):
+        #     Ix[4], Iy[4] = center_left[0] - I_middle[0], center_left[1] - I_middle[1]
+        #     IRx[4], IRy[4] = center_right[0], center_right[1]
+        #     print(Ix[4], Iy[4])
+        # elif key == ord('l'):
+        #     Ix[5], Iy[5] = center_left[0] - I_middle[0], center_left[1] - I_middle[1]
+        #     IRx[5], IRy[5] = center_right[0], center_right[1]
+        #     print(Ix[5], Iy[5])
+        # elif key == ord('n'):
+        #     Ix[6], Iy[6] = center_left[0] - I_middle[0], center_left[1] - I_middle[1]
+        #     IRx[6], IRy[6] = center_right[0], center_right[1]
+        #     print(Ix[6], Iy[6])
+        # elif key == ord('m'):
+        #     Ix[7], Iy[7] = center_left[0] - I_middle[0], center_left[1] - I_middle[1]
+        #     IRx[7], IRy[7] = center_right[0], center_right[1]
+        #     print(Ix[7], Iy[7])
+        # elif key == ord(','):
+        #     Ix[8], Iy[8] = center_left[0] - I_middle[0], center_left[1] - I_middle[1]
+        #     IRx[8], IRy[8] = center_right[0], center_right[1]
+        #     print(Ix[8], Iy[8])
 
 
 frame.release()
