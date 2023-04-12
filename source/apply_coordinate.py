@@ -1,6 +1,7 @@
 import cv2 as cv
 import numpy as np
 import mediapipe as mp
+import multiprocessing
 
 #카메라 회전 함수
 def Rotate(src, degrees):
@@ -91,209 +92,229 @@ def set_right_eye():
     return (right_center[0] - RL) / (RR - RL), (right_center[1] - high_middle) / (low_middle - high_middle)
 
 
+def show_window(frame):
+    # 원래 이미지 표시
+    cv.imshow('Main', frame)
+
+    # 회전된 이미지 표시
+    # cv.imshow('CAM_RotateWindow', img)
+
+    # 반전된 이미지 표시
+    # cv.imshow('CAM_FlipWindow', img2)
+
+    # 윈도우 크기 늘리기
+    resolutuon = 1080
+    # dst2 = cv.resize(img, dsize=(resolution/9*16, resolution), interpolation=cv.INTER_AREA)
+    # cv.imshow('CAM_RotateWindow2', dst2)
+
+def check_face(queue1, queue2):
+    with mp_face_mesh.FaceMesh(max_num_faces =1,
+                               refine_landmarks =True,
+                               min_detection_confidence =0.5, # 높이면 정확성 up, 속도 down
+                               min_tracking_confidence =0.5   # 내리면 속도 up, 정학성 down
+    ) as face_mesh:
+        while True:
+            if cam.get(cv.CAP_PROP_POS_FRAMES) == cam.get(cv.CAP_PROP_FRAME_COUNT):
+                cam.set(cv.CAP_PROP_POS_FRAMES, 0)
+            ret, frame = cam.read()
+            if not ret:
+                break
+            img_h, img_w = frame.shape[:2]
+            results = face_mesh.process(frame)
+            if results.multi_face_landmarks:
+                mesh_points = np.array([np.multiply([p.x, p.y], [img_w, img_h]).astype(int)
+                                     for p in results.multi_face_landmarks[0].landmark])
+
+                #face_mesh 전부 표시하기 색(B,G,R)
+                i = 0
+                for pt in mesh_points:
+
+                    if i == 9 or i == 164: # 얼굴의 중심(상, 하)
+                        cv.circle(frame, pt, 1, (255, 0, 0), -1, cv.LINE_AA)
+                    elif i == 468 or i == 473 : # 눈동자(좌,우) 중심
+                        cv.circle(frame, pt, 1, (255, 0, 0), -1, cv.LINE_AA)
+                    elif i == 130 or i == 243: # 왼 눈 양끝
+                        cv.circle(frame, pt, 1, (255, 0, 0), -1, cv.LINE_AA)
+                    elif i == 359 or i == 463: # 오른 눈 양끝
+                        cv.circle(frame, pt, 1, (255, 0, 0), -1, cv.LINE_AA)
+                    elif i == 6:  # 양눈 중심
+                        cv.circle(frame, pt, 1, (255, 0, 0), -1, cv.LINE_AA)
+                    else:
+                        #cv.circle(img, center,radius,color,thicknex,lineType)
+                        cv.circle(frame, pt, 1, (255,255,255), -1, cv.LINE_AA)
+                    i += 1
+
+                #print(mesh_points)
+                cv.polylines(frame, [mesh_points[LEFT_EYE]], True, (0, 255, 0), 2, cv.LINE_AA)
+                cv.polylines(frame, [mesh_points[RIGHT_EYE]], True, (0, 255, 0), 2, cv.LINE_AA)
+                cv.polylines(frame, [mesh_points[LEFT_IRIS]], True, (0, 0, 255), 2, cv.LINE_AA)
+                cv.polylines(frame, [mesh_points[RIGHT_IRIS]], True, (0, 0, 255), 2, cv.LINE_AA)
+                (l_cx, l_cy), l_radius = cv.minEnclosingCircle(mesh_points[LEFT_IRIS])
+                (r_cx, r_cy), r_radius = cv.minEnclosingCircle(mesh_points[RIGHT_IRIS])
+                center_left = np.array([l_cx, l_cy], dtype=np.int32)
+                center_right = np.array([r_cx, r_cy], dtype=np.int32)
+                cv.circle(frame, center_left, int(l_radius), (0, 0, 255), 2, cv.LINE_AA)
+                cv.circle(frame, center_right, int(r_radius), (0, 0, 255), 2, cv.LINE_AA)
+                #print(center_left)
+                # face_direction
+                face_2d = []
+                face_3d = []
+
+                for idx, lm in enumerate(results.multi_face_landmarks[0].landmark):
+                    if idx in FACE_HEAD_POSE_LACNMARKS:
+                        #LL, LR, RR, RL, high_middle, low_middle
+                        if idx == 1:
+                            nose_2d = (lm.x * img_w, lm.y * img_h)
+                            nose_3d = (lm.x * img_w, lm.y * img_h, lm.z * 3000)
+                        if idx == 6:
+                            middle= (lm.x * img_w, lm.y * img_h)
+                        if idx == 9:
+                            high_middle = lm.y
+                        if idx == 164:
+                            low_middle = lm.y
+                        if idx == 468:
+                            left_center = (lm.x, lm.y)
+                        if idx == 130:
+                            LL = lm.x
+                        if idx == 243:
+                            LR = lm.x
+                        if idx == 473:
+                            right_center = (lm.x, lm.y)
+                        if idx == 463:
+                            RL = lm.x
+                        if idx == 359:
+                            RR = lm.x
+
+                        x, y = int(lm.x * img_w), int(lm.y * img_h)
+
+                        face_2d.append([x, y])
+                        face_3d.append([x, y, lm.z])
+
+
+                face_2d = np.array(face_2d, dtype=np.float64)
+                face_3d = np.array(face_3d, dtype=np.float64)
+
+                focal_len = 1 * img_w
+
+                camera_mat = np.array([[focal_len, 0, img_h / 2],
+                                       [0, focal_len, img_w / 2],
+                                       [0, 0, 1]])
+
+                dist_mat = np.zeros((4, 1), dtype=np.float64)
+
+                success, rot_vec, trans_vec = cv.solvePnP(face_3d, face_2d, camera_mat, dist_mat)
+
+                rot_mat, jac = cv.Rodrigues(rot_vec)
+                angles, mtxR, mtxQ, Qx, Qy, Qz = cv.RQDecomp3x3(rot_mat)
+                x = angles[0] * 360
+                y = angles[1] * 360
+                z = angles[2] * 360
+
+                # nose+3d_projection, jacobian = cv.projectionPoints(nose_3d, rot_vec, trans_vec, camera_mat, dist_mat)
+                #print(Ix, Iy)
+                p1 = (int(middle[0]), int(middle[1]))
+                #print(f'눈 사이 : {p1}')
+                #print(f'왼눈, 오른눈 : {center_left}, {center_right} ')
+                if Iy[8]:
+                    X = (Ix[2] - Ix[0] + Ix[5] - Ix[3] + Ix[8] - Ix[6]) / 6
+                    Y = (Iy[6] - Iy[0] + Iy[7] - Iy[1] + Iy[8] - Iy[2]) / 6
+                    #print(X, Y)
+
+                    RX = (IRx[2] - IRx[0] + IRx[5] - IRx[3] + IRx[8] - IRx[6]) / 6
+                    RY = (IRy[6] - IRy[0] + IRy[7] - IRy[1] + IRy[8] - IRy[2]) / 6
+
+                    half_w = img_w / 2
+                    half_h = img_h / 2
+
+                    set_width = 935
+                    set_height = 515
 
 
 
+                    # L_eye = (half_w + (((left_center[0]-LL) / (LR-LL)) -Ix[4]) * half_w / X, half_h + (((left_center[1] - high_middle) / (low_middle - high_middle)) -Iy[4]) * half_h / Y)
+                    # R_eye = (half_w + (((right_center[0]-RL) / (RR-RL)) -IRx[4]) * half_w / RX, half_h + (((right_center[1] - high_middle) / (low_middle - high_middle)) -IRy[4]) * half_h / RY)
+
+                    L_eye = (half_w + (((left_center[0]-LL) / (LR-LL)) -Ix[4]) * set_width / X, half_h + (((left_center[1] - high_middle) / (low_middle - high_middle)) -Iy[4]) * set_height / Y)
+                    R_eye = (half_w + (((right_center[0]-RL) / (RR-RL)) -IRx[4]) * set_width / RX, half_h + (((right_center[1] - high_middle) / (low_middle - high_middle)) -IRy[4]) * set_height / RY)
+
+                    #print(L_eye)
+
+                    #p2 = (int(L_eye[0]), int(L_eye[1]))
+                    p2 = (int( (L_eye[0]+R_eye[0]) / 2 ), int( (L_eye[1]+R_eye[1]) / 2 ))
+                    queue2.put(p2)
+                    cv.line(frame, p1, p2, (255, 255, 0), 3)
 
 
 
-with mp_face_mesh.FaceMesh(max_num_faces =1,
-                           refine_landmarks =True,
-                           min_detection_confidence =0.5, # 높이면 정확성 up, 속도 down
-                           min_tracking_confidence =0.5   # 내리면 속도 up, 정학성 down
-) as face_mesh:
-    while True:
-        if cam.get(cv.CAP_PROP_POS_FRAMES) == cam.get(cv.CAP_PROP_FRAME_COUNT):
-            cam.set(cv.CAP_PROP_POS_FRAMES, 0)
-        ret, frame = cam.read()
-        if not ret:
-            break
-        img_h, img_w = frame.shape[:2]
-        results = face_mesh.process(frame)
-        if results.multi_face_landmarks:
-            mesh_points = np.array([np.multiply([p.x, p.y], [img_w, img_h]).astype(int)
-                                 for p in results.multi_face_landmarks[0].landmark])
+            # 이미지를 회전시켜서 img로 돌려받음
+            img = Rotate(frame, 90)  # 뒷면90 or 180 or 앞면270
 
-            #face_mesh 전부 표시하기 색(B,G,R)
-            i = 0
-            for pt in mesh_points:
+            # 이미지를 반전시켜 img2로 돌려받음
+            img2 = Flip(frame, 1)
 
-                if i == 9 or i == 164: # 얼굴의 중심(상, 하)
-                    cv.circle(frame, pt, 1, (255, 0, 0), -1, cv.LINE_AA)
-                elif i == 468 or i == 473 : # 눈동자(좌,우) 중심
-                    cv.circle(frame, pt, 1, (255, 0, 0), -1, cv.LINE_AA)
-                elif i == 130 or i == 243: # 왼 눈 양끝
-                    cv.circle(frame, pt, 1, (255, 0, 0), -1, cv.LINE_AA)
-                elif i == 359 or i == 463: # 오른 눈 양끝
-                    cv.circle(frame, pt, 1, (255, 0, 0), -1, cv.LINE_AA)
-                elif i == 6:  # 양눈 중심
-                    cv.circle(frame, pt, 1, (255, 0, 0), -1, cv.LINE_AA)
-                else:
-                    #cv.circle(img, center,radius,color,thicknex,lineType)
-                    cv.circle(frame, pt, 1, (255,255,255), -1, cv.LINE_AA)
-                i += 1
+            #show_window(frame)
+            cv.imshow('Main', frame)
 
-            #print(mesh_points)
-            cv.polylines(frame, [mesh_points[LEFT_EYE]], True, (0, 255, 0), 2, cv.LINE_AA)
-            cv.polylines(frame, [mesh_points[RIGHT_EYE]], True, (0, 255, 0), 2, cv.LINE_AA)
-            cv.polylines(frame, [mesh_points[LEFT_IRIS]], True, (0, 0, 255), 2, cv.LINE_AA)
-            cv.polylines(frame, [mesh_points[RIGHT_IRIS]], True, (0, 0, 255), 2, cv.LINE_AA)
-            (l_cx, l_cy), l_radius = cv.minEnclosingCircle(mesh_points[LEFT_IRIS])
-            (r_cx, r_cy), r_radius = cv.minEnclosingCircle(mesh_points[RIGHT_IRIS])
-            center_left = np.array([l_cx, l_cy], dtype=np.int32)
-            center_right = np.array([r_cx, r_cy], dtype=np.int32)
-            cv.circle(frame, center_left, int(l_radius), (0, 0, 255), 2, cv.LINE_AA)
-            cv.circle(frame, center_right, int(r_radius), (0, 0, 255), 2, cv.LINE_AA)
-            #print(center_left)
-            # face_direction
-            face_2d = []
-            face_3d = []
+            while True:
+                if not queue1.empty():
+                    if 'q' == queue1.get():
+                        frame.release()
+                        # 메인 윈도우 제거
+                        cv.destroyAllWindows()
+                    else:
+                        setting = queue1.get()
+                        print(setting)
 
-            for idx, lm in enumerate(results.multi_face_landmarks[0].landmark):
-                if idx in FACE_HEAD_POSE_LACNMARKS:
-                    #LL, LR, RR, RL, high_middle, low_middle
-                    if idx == 1:
-                        nose_2d = (lm.x * img_w, lm.y * img_h)
-                        nose_3d = (lm.x * img_w, lm.y * img_h, lm.z * 3000)
-                    if idx == 6:
-                        middle= (lm.x * img_w, lm.y * img_h)
-                    if idx == 9:
-                        high_middle = lm.y
-                    if idx == 164:
-                        low_middle = lm.y
-                    if idx == 468:
-                        left_center = (lm.x, lm.y)
-                    if idx == 130:
-                        LL = lm.x
-                    if idx == 243:
-                        LR = lm.x
-                    if idx == 473:
-                        right_center = (lm.x, lm.y)
-                    if idx == 463:
-                        RL = lm.x
-                    if idx == 359:
-                        RR = lm.x
+                        Ix[setting], Iy[setting] = set_left_eye()
+                        IRx[setting], IRy[setting] = set_right_eye()
+            # key = cv.waitKey(1)
+            # if key == ord('q'):
+            #     break
+            # elif key == ord('\\'):
+            #     setting = setting % 9
+            #     print(setting)
+            #
+            #     Ix[setting], Iy[setting] = set_left_eye()
+            #     IRx[setting], IRy[setting] = set_right_eye()
+            #     #print(Ix[0], Iy[0])q
+            #     setting += 1
+            # elif key == ord('i'):
+            #     Ix[1], Iy[1] = center_left[0] - I_middle[0], center_left[1] - I_middle[1]
+            #     IRx[1], IRy[1] = center_right[0], center_right[1]
+            #     print(Ix[1], Iy[1])
+            # elif key == ord('o'):
+            #     Ix[2], Iy[2] = center_left[0] - I_middle[0], center_left[1] - I_middle[1]
+            #     IRx[2], IRy[2] = center_right[0], center_right[1]
+            #     print(Ix[2], Iy[2])
+            # elif key == ord('j'):
+            #     Ix[3], Iy[3] = center_left[0] - I_middle[0], center_left[1] - I_middle[1]
+            #     IRx[3], IRy[3] = center_right[0], center_right[1]
+            #     print(Ix[3], Iy[3])
+            # elif key == ord('k'):
+            #     Ix[4], Iy[4] = center_left[0] - I_middle[0], center_left[1] - I_middle[1]
+            #     IRx[4], IRy[4] = center_right[0], center_right[1]
+            #     print(Ix[4], Iy[4])
+            # elif key == ord('l'):
+            #     Ix[5], Iy[5] = center_left[0] - I_middle[0], center_left[1] - I_middle[1]
+            #     IRx[5], IRy[5] = center_right[0], center_right[1]
+            #     print(Ix[5], Iy[5])
+            # elif key == ord('n'):
+            #     Ix[6], Iy[6] = center_left[0] - I_middle[0], center_left[1] - I_middle[1]
+            #     IRx[6], IRy[6] = center_right[0], center_right[1]
+            #     print(Ix[6], Iy[6])
+            # elif key == ord('m'):
+            #     Ix[7], Iy[7] = center_left[0] - I_middle[0], center_left[1] - I_middle[1]
+            #     IRx[7], IRy[7] = center_right[0], center_right[1]
+            #     print(Ix[7], Iy[7])
+            # elif key == ord(','):
+            #     Ix[8], Iy[8] = center_left[0] - I_middle[0], center_left[1] - I_middle[1]
+            #     IRx[8], IRy[8] = center_right[0], center_right[1]
+            #     print(Ix[8], Iy[8])
 
-                    x, y = int(lm.x * img_w), int(lm.y * img_h)
-
-                    face_2d.append([x, y])
-                    face_3d.append([x, y, lm.z])
+    frame.release()
+    #메인 윈도우 제거
+    cv.destroyAllWindows()
+    #회전 원도우 제거
+    #cv.destroyWindow('CAM_RotateWindow')
 
 
-            face_2d = np.array(face_2d, dtype=np.float64)
-            face_3d = np.array(face_3d, dtype=np.float64)
-
-            focal_len = 1 * img_w
-
-            camera_mat = np.array([[focal_len, 0, img_h / 2],
-                                   [0, focal_len, img_w / 2],
-                                   [0, 0, 1]])
-
-            dist_mat = np.zeros((4, 1), dtype=np.float64)
-
-            success, rot_vec, trans_vec = cv.solvePnP(face_3d, face_2d, camera_mat, dist_mat)
-
-            rot_mat, jac = cv.Rodrigues(rot_vec)
-            angles, mtxR, mtxQ, Qx, Qy, Qz = cv.RQDecomp3x3(rot_mat)
-            x = angles[0] * 360
-            y = angles[1] * 360
-            z = angles[2] * 360
-
-            # nose+3d_projection, jacobian = cv.projectionPoints(nose_3d, rot_vec, trans_vec, camera_mat, dist_mat)
-            #print(Ix, Iy)
-            p1 = (int(middle[0]), int(middle[1]))
-            #print(f'눈 사이 : {p1}')
-            #print(f'왼눈, 오른눈 : {center_left}, {center_right} ')
-            if Iy[8]:
-                X = (Ix[2] - Ix[0] + Ix[5] - Ix[3] + Ix[8] - Ix[6]) / 6
-                Y = (Iy[6] - Iy[0] + Iy[7] - Iy[1] + Iy[8] - Iy[2]) / 6
-                #print(X, Y)
-
-                RX = (IRx[2] - IRx[0] + IRx[5] - IRx[3] + IRx[8] - IRx[6]) / 6
-                RY = (IRy[6] - IRy[0] + IRy[7] - IRy[1] + IRy[8] - IRy[2]) / 6
-
-                half_w = img_w / 2
-                half_h = img_h / 2
-
-                L_eye = (half_w + (((left_center[0]-LL) / (LR-LL)) -Ix[4]) * half_w / X, half_h + (((left_center[1] - high_middle) / (low_middle - high_middle)) -Iy[4]) * half_h / Y)
-
-                R_eye = (half_w + (((right_center[0]-RL) / (RR-RL)) -IRx[4]) * half_w / RX, half_h + (((right_center[1] - high_middle) / (low_middle - high_middle)) -IRy[4]) * half_h / RY)
-
-                #print(L_eye)
-
-                #p2 = (int(L_eye[0]), int(L_eye[1]))
-                p2 = (int( (L_eye[0]+R_eye[0]) / 2 ), int( (L_eye[1]+R_eye[1]) / 2 ))
-
-                cv.line(frame, p1, p2, (255, 255, 0), 3)
-
-
-
-        # 이미지를 회전시켜서 img로 돌려받음
-        img = Rotate(frame, 90)  # 뒷면90 or 180 or 앞면270
-
-        # 이미지를 반전시켜 img2로 돌려받음
-        img2 = Flip(frame, 1)
-
-        #원래 이미지 표시
-        cv.imshow('Main', frame)
-
-        # 회전된 이미지 표시
-        #cv.imshow('CAM_RotateWindow', img)
-
-        #반전된 이미지 표시
-        #cv.imshow('CAM_FlipWindow', img2)
-
-        #윈도우 크기 늘리기
-        resolutuon = 1080
-        #dst2 = cv.resize(img, dsize=(resolution/9*16, resolution), interpolation=cv.INTER_AREA)
-        #cv.imshow('CAM_RotateWindow2', dst2)
-        key = cv.waitKey(1)
-        if key == ord('q'):
-            break
-        elif key == ord('\\'):
-            setting = setting % 9
-            print(setting)
-
-            Ix[setting], Iy[setting] = set_left_eye()
-            IRx[setting], IRy[setting] = set_right_eye()
-            #print(Ix[0], Iy[0])
-            setting += 1
-        # elif key == ord('i'):
-        #     Ix[1], Iy[1] = center_left[0] - I_middle[0], center_left[1] - I_middle[1]
-        #     IRx[1], IRy[1] = center_right[0], center_right[1]
-        #     print(Ix[1], Iy[1])
-        # elif key == ord('o'):
-        #     Ix[2], Iy[2] = center_left[0] - I_middle[0], center_left[1] - I_middle[1]
-        #     IRx[2], IRy[2] = center_right[0], center_right[1]
-        #     print(Ix[2], Iy[2])
-        # elif key == ord('j'):
-        #     Ix[3], Iy[3] = center_left[0] - I_middle[0], center_left[1] - I_middle[1]
-        #     IRx[3], IRy[3] = center_right[0], center_right[1]
-        #     print(Ix[3], Iy[3])
-        # elif key == ord('k'):
-        #     Ix[4], Iy[4] = center_left[0] - I_middle[0], center_left[1] - I_middle[1]
-        #     IRx[4], IRy[4] = center_right[0], center_right[1]
-        #     print(Ix[4], Iy[4])
-        # elif key == ord('l'):
-        #     Ix[5], Iy[5] = center_left[0] - I_middle[0], center_left[1] - I_middle[1]
-        #     IRx[5], IRy[5] = center_right[0], center_right[1]
-        #     print(Ix[5], Iy[5])
-        # elif key == ord('n'):
-        #     Ix[6], Iy[6] = center_left[0] - I_middle[0], center_left[1] - I_middle[1]
-        #     IRx[6], IRy[6] = center_right[0], center_right[1]
-        #     print(Ix[6], Iy[6])
-        # elif key == ord('m'):
-        #     Ix[7], Iy[7] = center_left[0] - I_middle[0], center_left[1] - I_middle[1]
-        #     IRx[7], IRy[7] = center_right[0], center_right[1]
-        #     print(Ix[7], Iy[7])
-        # elif key == ord(','):
-        #     Ix[8], Iy[8] = center_left[0] - I_middle[0], center_left[1] - I_middle[1]
-        #     IRx[8], IRy[8] = center_right[0], center_right[1]
-        #     print(Ix[8], Iy[8])
-
-
-frame.release()
-#메인 윈도우 제거
-cv.destroyAllWindows()
-#회전 원도우 제거
-#cv.destroyWindow('CAM_RotateWindow')

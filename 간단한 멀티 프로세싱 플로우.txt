@@ -1,0 +1,60 @@
+#main.py
+
+import multiprocessing
+import time
+
+import apply_coordinate
+import pygame
+import test
+
+
+
+if __name__ == '__main__':
+    pygame.init()
+    queue1 = multiprocessing.Queue()
+    queue2 = multiprocessing.Queue()
+
+    p1 = multiprocessing.Process(target=test.main, args=(queue1, queue2))
+    p2 = multiprocessing.Process(target=apply_coordinate.check_face, args=(queue1, queue2))
+
+
+    p1.start()
+    p2.start()
+
+    p1.join() #test 프로그램 종료 대기
+    p2.join() #mediapipe 프로그램 종료 대기
+
+
+# apply_coordinate.py
+
+import multiprocessing
+
+def check_face(queue1, queue2):
+	p2 = (int( (L_eye[0]+R_eye[0]) / 2 ), int( (L_eye[1]+R_eye[1]) / 2 )) # 시선 좌표
+	queue2.put(p2) # 2번 큐에 저장
+
+
+      while True:
+      	if not queue1.empty():
+            	if 'q' == queue1.get(): # 1번 큐에 저장된 데이터 뽑아내서 그게 'q' 라면
+                        frame.release()	# 프레임 제거
+                        # 메인 윈도우 제거
+                        cv.destroyAllWindows() #윈도우 제거
+			else:
+                  	setting = queue1.get()# 1번 큐에 저장된 좌표 번호를 뽑아내서 setting 에 저장
+                  	print(setting)
+
+                  	Ix[setting], Iy[setting] = set_left_eye()
+                  	IRx[setting], IRy[setting] = set_right_eye()
+
+# test.py
+
+import multiprocessing
+
+def main(queue1, queue2): # 1번, 2번 큐를 인자로 받음
+	if keys[pygame.K_q]: # 키보드에서 q를 누르면
+		running = False
+		queue1.put('q') # 1번 큐에 'q' 저장
+	while True:
+      	if not queue2.empty():
+			sight = queue2.get() #시선 좌표를 뽑아서 sight 변수에 저장해서 이용
