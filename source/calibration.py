@@ -16,8 +16,9 @@ colors = [
     (128, 0, 128), (0, 128, 128)
 ]
 
-q = [0,1,2,3,4,5,6]
+q = [0,1,2,3,4,5,6,7]
 random.shuffle(q)
+q.append(q[7])
 
 posNum = 0
 
@@ -48,6 +49,12 @@ def draw_points(center_color, target_colors):
     for i, position in enumerate(positions):
         pygame.draw.circle(screen, target_colors[i], position, 25)
 
+
+def draw_Ipoint(p2):
+    print(p2)
+    pygame.draw.circle(screen, (255,0,0), p2, 10)
+
+
 def check_clicked_color(mouse_pos, center_color, target_colors):
     global posNum
 
@@ -69,6 +76,9 @@ def check_clicked_color(mouse_pos, center_color, target_colors):
             return target_colors[i] == center_color
 
     return False
+
+
+
 
 def draw_timer(time_elapsed):
     font = pygame.font.Font(None, 36)
@@ -161,12 +171,10 @@ Iy = [''] * 9
 IRx = [''] * 9
 IRy = [''] * 9
 
-def set_left_eye():
-    global left_center, LL,LR, high_middle, low_middle
+def set_left_eye(left_center, LL,LR, high_middle, low_middle):
     return (left_center[0]-LL) / (LR-LL), (left_center[1]-high_middle) / (low_middle-high_middle)
 
-def set_right_eye():
-    global right_center, RL, RR, high_middle, low_middle
+def set_right_eye(right_center, RL, RR, high_middle, low_middle):
     return (right_center[0] - RL) / (RR - RL), (right_center[1] - high_middle) / (low_middle - high_middle)
 
 
@@ -198,8 +206,9 @@ def calibration_test():
     click = False
 
     if len(q) == 0:
-        q = [0, 1, 2, 3, 4, 5, 6]
+        q = [0, 1, 2, 3, 4, 5, 6, 7]
         random.shuffle(q)
+        q.append(q[7])
         game_started = False
 
     screen.fill((255, 255, 255))
@@ -214,10 +223,13 @@ def calibration_test():
 
 
         elif event.type == pygame.MOUSEBUTTONDOWN:
+            print(q)
             if not game_started:
                 game_started = True
                 start_ticks = pygame.time.get_ticks()
                 posNum = 4
+
+                return True
 
 
             elif check_clicked_color(pygame.mouse.get_pos(), center_color, target_colors):
@@ -225,7 +237,7 @@ def calibration_test():
                 print("좌표:", correct_click_position)
                 center_color, target_colors = create_points()
                 start_ticks = pygame.time.get_ticks()
-            click = True
+                click = True
 
     draw_points(center_color, target_colors)
 
@@ -268,7 +280,7 @@ def main():
                 img_h, img_w = frame.shape[:2]
                 results = face_mesh.process(frame)
                 if results.multi_face_landmarks:
-                    print("Recognized Face")
+                    #print("Recognized Face")
                     mesh_points = np.array([np.multiply([p.x, p.y], [img_w, img_h]).astype(int)
                                             for p in results.multi_face_landmarks[0].landmark])
 
@@ -361,7 +373,8 @@ def main():
                     p1 = (int(middle[0]), int(middle[1]))
                     # print(f'눈 사이 : {p1}')
                     # print(f'왼눈, 오른눈 : {center_left}, {center_right} ')
-                    if Iy[8]:
+                    if Iy[0] and Iy[1] and Iy[2] and Iy[3] and Iy[8] and Iy[5] and Iy[6] and Iy[7]:
+                        print('complete')
                         X = (Ix[2] - Ix[0] + Ix[5] - Ix[3] + Ix[8] - Ix[6]) / 6
                         Y = (Iy[6] - Iy[0] + Iy[7] - Iy[1] + Iy[8] - Iy[2]) / 6
                         # print(X, Y)
@@ -390,9 +403,11 @@ def main():
                         # p2 = (int(L_eye[0]), int(L_eye[1]))
                         p2 = (int((L_eye[0] + R_eye[0]) / 2), int((L_eye[1] + R_eye[1]) / 2))
                         cv.line(frame, p1, p2, (255, 255, 0), 3)
+                        #print(p2)
 
                 else:
-                    print("Not Recognized Face")
+                    #print("Not Recognized Face")
+                    pass
 
                 # 이미지를 회전시켜서 img로 돌려받음
                 img = Rotate(frame, 90)  # 뒷면90 or 180 or 앞면270
@@ -400,22 +415,22 @@ def main():
                 # 이미지를 반전시켜 img2로 돌려받음
                 img2 = Flip(frame, 1)
 
-                # show_window(frame)
-                #cv.imshow('Main', frame)
+                show_window(frame)
+                cv.imshow('Main', frame)
 
                 click = calibration_test()
-                print(click)
+                #print(click)
                 key = cv.waitKey(1)
                 if key == ord('q'):
                     break
                 elif click and results.multi_face_landmarks:
                     setting = posNum
                     print(setting)
-
-                    Ix[setting], Iy[setting] = set_left_eye()
-                    IRx[setting], IRy[setting] = set_right_eye()
-                    # print(Ix[0], Iy[0])q
-                    setting += 1
+                    print(left_center)
+                    Ix[setting], Iy[setting] = set_left_eye(left_center, LL,LR, high_middle, low_middle)
+                    IRx[setting], IRy[setting] = set_right_eye(right_center, RL, RR, high_middle, low_middle)
+                    print(Ix[setting], Iy[setting])
+                    #setting += 1
 
 
 
