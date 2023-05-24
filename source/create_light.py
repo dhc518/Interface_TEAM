@@ -32,6 +32,8 @@ def save_image(width, height, x1,y1, x2,y2):
 
     # 이미지 저장 (PNG 형식으로 저장해야 투명한 영역이 보존됩니다)
     cv2.imwrite('light.png', image)
+    
+    
     /*
     image_path = "light.png"  # 이미지 파일 경로 설정
     image = pygame.image.load(image_path)
