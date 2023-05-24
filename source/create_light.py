@@ -32,5 +32,3 @@ def save_image(width, height, x1,y1, x2,y2):
 
     # 이미지 저장 (PNG 형식으로 저장해야 투명한 영역이 보존됩니다)
     cv2.imwrite('light.png', image)
-
-save_image(640, 480, 100,100, 200,200)
